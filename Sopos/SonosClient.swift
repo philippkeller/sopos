@@ -28,14 +28,11 @@ struct SonosService {
 struct SonosClient {
     let host: String
 
-    private static let session: URLSession = {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 4
-        return URLSession(configuration: config)
-    }()
+    private static let session = URLSession(configuration: .ephemeral)
 
     @discardableResult
-    func call(_ service: SonosService, _ action: String, _ args: [(String, String)] = []) async throws -> [String: String] {
+    func call(_ service: SonosService, _ action: String, _ args: [(String, String)] = [],
+              timeout: TimeInterval = 4) async throws -> [String: String] {
         let url = URL(string: "http://\(host):1400\(service.path)")!
         let argXML = args.map { "<\($0.0)>\(xmlEscape($0.1))</\($0.0)>" }.joined()
         let body = """
@@ -44,7 +41,7 @@ struct SonosClient {
             <s:Body><u:\(action) xmlns:u="\(service.urn)">\(argXML)</u:\(action)></s:Body></s:Envelope>
             """
 
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("text/xml; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
         request.setValue("\"\(service.urn)#\(action)\"", forHTTPHeaderField: "SOAPACTION")
@@ -65,9 +62,11 @@ struct SonosClient {
 
 extension SonosClient {
     private static let instance = ("InstanceID", "0")
+    /// Starting a stream makes the speaker contact the radio service first (TuneIn can take several seconds).
+    private static let startTimeout: TimeInterval = 20
 
     func play() async throws {
-        try await call(.avTransport, "Play", [Self.instance, ("Speed", "1")])
+        try await call(.avTransport, "Play", [Self.instance, ("Speed", "1")], timeout: Self.startTimeout)
     }
 
     func pause() async throws {
@@ -123,21 +122,14 @@ extension SonosClient {
                 ("EnqueuedURIMetaData", favorite.metadata),
                 ("DesiredFirstTrackNumberEnqueued", "0"),
                 ("EnqueueAsNext", "0"),
-            ])
+            ], timeout: Self.startTimeout)
             try await call(.avTransport, "SetAVTransportURI", [
                 Self.instance, ("CurrentURI", "x-rincon-queue:\(coordinatorID)#0"), ("CurrentURIMetaData", ""),
-            ])
+            ], timeout: Self.startTimeout)
         } else {
-            do {
-                try await call(.avTransport, "SetAVTransportURI", [
-                    Self.instance, ("CurrentURI", favorite.uri), ("CurrentURIMetaData", favorite.metadata),
-                ])
-            } catch {
-                // Some stations (e.g. TuneIn) reject their stored metadata with UPnP 402; the bare URI often works.
-                try await call(.avTransport, "SetAVTransportURI", [
-                    Self.instance, ("CurrentURI", favorite.uri), ("CurrentURIMetaData", ""),
-                ])
-            }
+            try await call(.avTransport, "SetAVTransportURI", [
+                Self.instance, ("CurrentURI", favorite.uri), ("CurrentURIMetaData", favorite.metadata),
+            ], timeout: Self.startTimeout)
         }
         try await play()
     }
