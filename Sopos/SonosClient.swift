@@ -105,32 +105,16 @@ extension SonosClient {
         ])
         return DIDLParser.parse(result["Result"] ?? "").compactMap { item in
             let uri = item.uri?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            guard let title = item.title, !uri.isEmpty else { return nil }
             let metadata = item.metadata?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard let title = item.title, Self.isRadio(uri: uri, metadata: metadata) else { return nil }
             return Favorite(title: title, uri: uri, metadata: metadata, artURL: artURL(item.albumArtURI))
         }
     }
 
-    /// `coordinatorID` is the RINCON_… id of the room, needed for queue-based favorites.
-    func play(_ favorite: Favorite, coordinatorID: String) async throws {
-        if favorite.uri.hasPrefix("x-rincon-cpcontainer:") {
-            // Playlists/shows must go through the queue; radio streams can be set directly.
-            try await call(.avTransport, "RemoveAllTracksFromQueue", [Self.instance])
-            try await call(.avTransport, "AddURIToQueue", [
-                Self.instance,
-                ("EnqueuedURI", favorite.uri),
-                ("EnqueuedURIMetaData", favorite.metadata),
-                ("DesiredFirstTrackNumberEnqueued", "0"),
-                ("EnqueueAsNext", "0"),
-            ], timeout: Self.startTimeout)
-            try await call(.avTransport, "SetAVTransportURI", [
-                Self.instance, ("CurrentURI", "x-rincon-queue:\(coordinatorID)#0"), ("CurrentURIMetaData", ""),
-            ], timeout: Self.startTimeout)
-        } else {
-            try await call(.avTransport, "SetAVTransportURI", [
-                Self.instance, ("CurrentURI", favorite.uri), ("CurrentURIMetaData", favorite.metadata),
-            ], timeout: Self.startTimeout)
-        }
+    func play(_ favorite: Favorite) async throws {
+        try await call(.avTransport, "SetAVTransportURI", [
+            Self.instance, ("CurrentURI", favorite.uri), ("CurrentURIMetaData", favorite.metadata),
+        ], timeout: Self.startTimeout)
         try await play()
     }
 
@@ -152,6 +136,15 @@ extension SonosClient {
             track = nil
         }
         return NowPlaying(station: station, track: track, uri: mediaInfo["CurrentURI"])
+    }
+
+    /// Radio stations only: playlists, albums and folders (e.g. a "coding" playlist) are hidden.
+    private static func isRadio(uri: String, metadata: String) -> Bool {
+        let radioSchemes = ["x-sonosapi-stream:", "x-sonosapi-radio:", "x-sonosapi-hls:", "x-rincon-mp3radio:",
+                            "aac:", "hls-radio:"]
+        if radioSchemes.contains(where: uri.hasPrefix) { return true }
+        let itemClass = DIDLParser.parse(metadata).first?.itemClass ?? ""
+        return itemClass.contains("audioBroadcast")
     }
 
     private func artURL(_ raw: String?) -> URL? {

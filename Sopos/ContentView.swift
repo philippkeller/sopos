@@ -71,7 +71,7 @@ private struct FavoritesList: View {
         .overlay {
             if player.favorites.isEmpty {
                 ContentUnavailableView(
-                    "No favorites yet", systemImage: "star",
+                    "No radio stations yet", systemImage: "radio",
                     description: Text("In the Sonos app, add the Sonos Radio stations you like to your "
                                       + "Sonos Favorites, then pull down here to refresh."))
             }
