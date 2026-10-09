@@ -105,8 +105,10 @@ extension SonosClient {
             ("SortCriteria", ""),
         ])
         return DIDLParser.parse(result["Result"] ?? "").compactMap { item in
-            guard let title = item.title, let uri = item.uri, !uri.isEmpty else { return nil }
-            return Favorite(title: title, uri: uri, metadata: item.metadata ?? "", artURL: artURL(item.albumArtURI))
+            let uri = item.uri?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard let title = item.title, !uri.isEmpty else { return nil }
+            let metadata = item.metadata?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return Favorite(title: title, uri: uri, metadata: metadata, artURL: artURL(item.albumArtURI))
         }
     }
 
@@ -126,9 +128,16 @@ extension SonosClient {
                 Self.instance, ("CurrentURI", "x-rincon-queue:\(coordinatorID)#0"), ("CurrentURIMetaData", ""),
             ])
         } else {
-            try await call(.avTransport, "SetAVTransportURI", [
-                Self.instance, ("CurrentURI", favorite.uri), ("CurrentURIMetaData", favorite.metadata),
-            ])
+            do {
+                try await call(.avTransport, "SetAVTransportURI", [
+                    Self.instance, ("CurrentURI", favorite.uri), ("CurrentURIMetaData", favorite.metadata),
+                ])
+            } catch {
+                // Some stations (e.g. TuneIn) reject their stored metadata with UPnP 402; the bare URI often works.
+                try await call(.avTransport, "SetAVTransportURI", [
+                    Self.instance, ("CurrentURI", favorite.uri), ("CurrentURIMetaData", ""),
+                ])
+            }
         }
         try await play()
     }
