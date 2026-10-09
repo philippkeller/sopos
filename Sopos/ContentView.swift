@@ -113,6 +113,8 @@ private struct FavoriteRow: View {
 
 private struct NowPlayingBar: View {
     @Environment(PlayerModel.self) private var player
+    @Environment(\.openURL) private var openURL
+    @State private var isLookingUp = false
 
     var body: some View {
         VStack(spacing: 14) {
@@ -129,6 +131,19 @@ private struct NowPlayingBar: View {
                     }
                 }
                 Spacer()
+                if player.nowPlaying.track != nil {
+                    Button {
+                        Task { await openWikipedia() }
+                    } label: {
+                        if isLookingUp {
+                            ProgressView().frame(width: 34, height: 34)
+                        } else {
+                            Image(systemName: "w.circle").font(.system(size: 30))
+                        }
+                    }
+                    .disabled(isLookingUp)
+                    .accessibilityLabel("Open on Wikipedia")
+                }
                 Button {
                     Task { await player.togglePlayback() }
                 } label: {
@@ -151,6 +166,12 @@ private struct NowPlayingBar: View {
         .padding(.horizontal)
         .padding(.vertical, 14)
         .background(.bar)
+    }
+
+    private func openWikipedia() async {
+        isLookingUp = true
+        defer { isLookingUp = false }
+        if let url = await player.wikipediaArticle() { openURL(url) }
     }
 }
 

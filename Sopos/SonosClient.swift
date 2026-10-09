@@ -133,30 +133,33 @@ extension SonosClient {
             return value
         }
 
-        let station = usable(DIDLParser.parse(mediaInfo["CurrentURIMetaData"] ?? "").first?.title)
-        var track: String?
+        var now = NowPlaying(uri: mediaInfo["CurrentURI"])
+        now.station = usable(DIDLParser.parse(mediaInfo["CurrentURIMetaData"] ?? "").first?.title)
         if let item = DIDLParser.parse(positionInfo["TrackMetaData"] ?? "").first {
             if let stream = usable(item.streamContent) {
-                track = Self.parseStreamContent(stream)
+                (now.artist, now.title) = Self.parseStreamContent(stream)
             } else {
-                let parts = [usable(item.creator), usable(item.title)].compactMap { $0 }
-                track = parts.isEmpty ? nil : parts.joined(separator: " – ")
+                (now.artist, now.title) = (usable(item.creator), usable(item.title))
             }
         }
-        if track == station { track = nil }
-        return NowPlaying(station: station, track: track, uri: mediaInfo["CurrentURI"])
+        if now.title == now.station { now.title = nil }
+        return now
     }
 
     /// Radio services send either "Artist - Title" or tagged "TYPE=SNG|TITLE x|ARTIST y|ALBUM z".
-    private static func parseStreamContent(_ content: String) -> String? {
-        guard content.contains("TYPE=SNG|") else { return content }
+    private static func parseStreamContent(_ content: String) -> (artist: String?, title: String?) {
+        guard content.contains("TYPE=SNG|") else {
+            guard let dash = content.range(of: " - ") else { return (nil, content) }
+            let artist = content[..<dash.lowerBound].trimmingCharacters(in: .whitespaces)
+            let title = content[dash.upperBound...].trimmingCharacters(in: .whitespaces)
+            return (artist.isEmpty ? nil : artist, title.isEmpty ? nil : title)
+        }
         var tags: [String: String] = [:]
         for part in content.split(separator: "|") {
             let pair = part.split(separator: " ", maxSplits: 1)
             if pair.count == 2 { tags[String(pair[0])] = pair[1].trimmingCharacters(in: .whitespaces) }
         }
-        let parts = [tags["ARTIST"], tags["TITLE"]].compactMap { $0 }.filter { !$0.isEmpty }
-        return parts.isEmpty ? nil : parts.joined(separator: " – ")
+        return (tags["ARTIST"].flatMap { $0.isEmpty ? nil : $0 }, tags["TITLE"].flatMap { $0.isEmpty ? nil : $0 })
     }
 
     /// Radio stations only: playlists, albums and folders (e.g. a "coding" playlist) are hidden.

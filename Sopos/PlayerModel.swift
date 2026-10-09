@@ -105,7 +105,7 @@ final class PlayerModel {
 
     func play(_ favorite: Favorite) async {
         guard let client else { return }
-        nowPlaying = NowPlaying(station: favorite.title, track: nil, uri: favorite.uri)
+        nowPlaying = NowPlaying(station: favorite.title, uri: favorite.uri)
         isPlaying = true
         do {
             try await client.play(favorite)
@@ -140,6 +140,18 @@ final class PlayerModel {
             }
             volumeTask = nil
         }
+    }
+
+    /// Finds the Wikipedia article for the current song (or its artist); reports an error if there is none.
+    func wikipediaArticle() async -> URL? {
+        let song = nowPlaying
+        do {
+            if let url = try await Wikipedia.article(artist: song.artist, title: song.title) { return url }
+            errorMessage = "No Wikipedia article found for \(song.track ?? "this song")."
+        } catch {
+            errorMessage = "Wikipedia search failed: \(error.localizedDescription)"
+        }
+        return nil
     }
 
     private func report(_ message: String) {

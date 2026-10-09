@@ -26,8 +26,15 @@ struct Favorite: Identifiable, Hashable, Codable {
 
 struct NowPlaying: Equatable {
     var station: String?
-    var track: String?
+    var artist: String?
+    var title: String?
     var uri: String?
+
+    /// "Artist – Title" for display.
+    var track: String? {
+        let parts = [artist, title].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: " – ")
+    }
 }
 
 /// Tiny UserDefaults wrapper so the app starts instantly with the last known state.
