@@ -33,8 +33,17 @@ enum Wikipedia {
         func mentions(_ name: String) -> Bool {
             // Snippets contain highlight markup like <span class="searchmatch">Amy</span>.
             let text = (title + " " + snippet).replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            return text.localizedCaseInsensitiveContains(name)
+            return Wikipedia.normalized(text).contains(Wikipedia.normalized(name))
         }
+    }
+
+    /// Loose comparison form: "The B-52's", "the B-52&#039;s" and "The B-52s" all become "theb52s".
+    private static func normalized(_ text: String) -> String {
+        let decoded = text
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&#[0-9]+;|&[a-z]+;", with: "", options: .regularExpression)
+        return decoded.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .filter { $0.isLetter || $0.isNumber }
     }
 
     private struct Response: Decodable {
