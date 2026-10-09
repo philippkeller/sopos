@@ -59,7 +59,7 @@ private struct FavoritesList: View {
             Button {
                 Task { await player.play(favorite) }
             } label: {
-                FavoriteRow(favorite: favorite, isCurrent: player.nowPlaying.uri == favorite.uri)
+                FavoriteRow(favorite: favorite, isCurrent: favorite.matches(uri: player.nowPlaying.uri))
             }
             .contextMenu {
                 Button("Copy debug info", systemImage: "ladybug") {

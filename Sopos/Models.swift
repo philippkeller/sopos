@@ -15,6 +15,13 @@ struct Favorite: Identifiable, Hashable, Codable {
     /// DIDL-Lite metadata Sonos needs to play the item (contains the service account).
     let metadata: String
     let artURL: URL?
+
+    /// TuneIn & co. may report the playing URI with different query flags than the stored favorite.
+    func matches(uri other: String?) -> Bool {
+        guard let other else { return false }
+        func base(_ uri: String) -> Substring { uri.split(separator: "?", maxSplits: 1).first ?? Substring(uri) }
+        return other == uri || base(other) == base(uri)
+    }
 }
 
 struct NowPlaying: Equatable {

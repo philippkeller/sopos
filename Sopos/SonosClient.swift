@@ -118,24 +118,45 @@ extension SonosClient {
         try await play()
     }
 
+    /// Mirrors SoCo's `get_current_track_info` heuristics for radio metadata.
     func nowPlaying() async throws -> NowPlaying {
         async let media = call(.avTransport, "GetMediaInfo", [Self.instance])
         async let position = call(.avTransport, "GetPositionInfo", [Self.instance])
         let (mediaInfo, positionInfo) = try await (media, position)
 
-        let station = DIDLParser.parse(mediaInfo["CurrentURIMetaData"] ?? "").first?.title
+        let trackURI = positionInfo["TrackURI"] ?? ""
+        // Drops placeholders: status codes (ZPSTR_CONNECTING), "NOT_IMPLEMENTED" and URL fragments posing as titles.
+        func usable(_ value: String?) -> String? {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty,
+                  !value.hasPrefix("ZPSTR_"), value != "NOT_IMPLEMENTED", !value.hasPrefix("x-") else { return nil }
+            if trackURI.contains(value) || (trackURI.removingPercentEncoding ?? "").contains(value) { return nil }
+            return value
+        }
+
+        let station = usable(DIDLParser.parse(mediaInfo["CurrentURIMetaData"] ?? "").first?.title)
         var track: String?
         if let item = DIDLParser.parse(positionInfo["TrackMetaData"] ?? "").first {
-            if let stream = item.streamContent, !stream.isEmpty {
-                track = stream
+            if let stream = usable(item.streamContent) {
+                track = Self.parseStreamContent(stream)
             } else {
-                track = [item.creator, item.title].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " – ")
+                let parts = [usable(item.creator), usable(item.title)].compactMap { $0 }
+                track = parts.isEmpty ? nil : parts.joined(separator: " – ")
             }
         }
-        if track == station || track?.isEmpty == true || track?.hasPrefix("x-") == true {
-            track = nil
-        }
+        if track == station { track = nil }
         return NowPlaying(station: station, track: track, uri: mediaInfo["CurrentURI"])
+    }
+
+    /// Radio services send either "Artist - Title" or tagged "TYPE=SNG|TITLE x|ARTIST y|ALBUM z".
+    private static func parseStreamContent(_ content: String) -> String? {
+        guard content.contains("TYPE=SNG|") else { return content }
+        var tags: [String: String] = [:]
+        for part in content.split(separator: "|") {
+            let pair = part.split(separator: " ", maxSplits: 1)
+            if pair.count == 2 { tags[String(pair[0])] = pair[1].trimmingCharacters(in: .whitespaces) }
+        }
+        let parts = [tags["ARTIST"], tags["TITLE"]].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " – ")
     }
 
     /// Radio stations only: playlists, albums and folders (e.g. a "coding" playlist) are hidden.

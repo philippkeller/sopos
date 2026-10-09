@@ -86,7 +86,12 @@ final class PlayerModel {
         if let currentVolume = await currentVolume, !isDraggingVolume, volumeTask == nil {
             volume = Double(currentVolume)
         }
-        if let current = await current { nowPlaying = current }
+        if var current = await current {
+            if current.station == nil {
+                current.station = favorites.first { $0.matches(uri: current.uri) }?.title
+            }
+            nowPlaying = current
+        }
     }
 
     func pollWhileActive() async {
