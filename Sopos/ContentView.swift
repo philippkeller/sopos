@@ -61,6 +61,11 @@ private struct FavoritesList: View {
             } label: {
                 FavoriteRow(favorite: favorite, isCurrent: player.nowPlaying.uri == favorite.uri)
             }
+            .contextMenu {
+                Button("Copy debug info", systemImage: "ladybug") {
+                    UIPasteboard.general.string = "\(favorite.title)\nURI: \(favorite.uri)\nMetadata: \(favorite.metadata)"
+                }
+            }
         }
         .listStyle(.plain)
         .overlay {
