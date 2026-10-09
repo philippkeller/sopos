@@ -99,11 +99,11 @@ final class PlayerModel {
     // MARK: Controls
 
     func play(_ favorite: Favorite) async {
-        guard let client, let room else { return }
+        guard let client else { return }
         nowPlaying = NowPlaying(station: favorite.title, track: nil, uri: favorite.uri)
         isPlaying = true
         do {
-            try await client.play(favorite, coordinatorID: room.id)
+            try await client.play(favorite)
         } catch {
             isPlaying = false
             errorMessage = "Couldn't play \(favorite.title): \(error.localizedDescription)"

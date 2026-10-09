@@ -36,6 +36,8 @@ struct DIDLItem {
     var metadata: String?
     var albumArtURI: String?
     var streamContent: String?
+    /// upnp:class, e.g. `object.item.audioItem.audioBroadcast` for radio stations.
+    var itemClass: String?
 }
 
 /// Parses DIDL-Lite, the metadata format Sonos uses for favorites and tracks.
@@ -79,6 +81,7 @@ final class DIDLParser: NSObject, XMLParserDelegate {
         case "resMD": current?.metadata = text
         case "albumArtURI": current?.albumArtURI = text
         case "streamContent": current?.streamContent = text
+        case "class": current?.itemClass = text
         default: break
         }
     }
