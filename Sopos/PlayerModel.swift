@@ -18,6 +18,7 @@ final class PlayerModel {
     private(set) var nowPlaying = NowPlaying()
     var errorMessage: String?
     var isDraggingVolume = false
+    private(set) var likedSongs: [LikedSong] = Store.load(Store.likedSongs) ?? []
     private(set) var library: NavidromeClient? = NavidromeAccount.load().map(NavidromeClient.init)
 
     @ObservationIgnored private var pendingVolume: Int?
@@ -186,6 +187,24 @@ final class PlayerModel {
             }
             volumeTask = nil
         }
+    }
+
+    var isCurrentSongLiked: Bool { likedSongs.contains { $0.matches(nowPlaying) } }
+
+    /// Hearts the playing song (newest first), or removes the heart again.
+    func toggleLike() {
+        if isCurrentSongLiked {
+            likedSongs.removeAll { $0.matches(nowPlaying) }
+        } else if let title = nowPlaying.title {
+            likedSongs.insert(LikedSong(artist: nowPlaying.artist, title: title, station: nowPlaying.station,
+                                        date: .now), at: 0)
+        }
+        Store.save(likedSongs, Store.likedSongs)
+    }
+
+    func removeLikedSongs(at offsets: IndexSet) {
+        likedSongs.remove(atOffsets: offsets)
+        Store.save(likedSongs, Store.likedSongs)
     }
 
     /// Finds the Wikipedia article for the current song (or its artist); reports an error if there is none.

@@ -4,6 +4,7 @@ struct ContentView: View {
     @Environment(PlayerModel.self) private var player
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
+    @State private var showLikedSongs = false
     @AppStorage("source") private var source = Source.radio
 
     enum Source: String { case radio, library }
@@ -13,11 +14,16 @@ struct ContentView: View {
             content
                 .navigationTitle(player.room?.name ?? "Sopos")
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { showLikedSongs = true } label: { Image(systemName: "heart.text.square") }
+                            .accessibilityLabel("Liked songs")
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { showSettings = true } label: { Image(systemName: "gearshape") }
                     }
                 }
                 .sheet(isPresented: $showSettings) { SettingsView() }
+                .sheet(isPresented: $showLikedSongs) { LikedSongsView() }
         }
         .safeAreaInset(edge: .bottom) {
             if player.room != nil { NowPlayingBar() }
@@ -157,6 +163,17 @@ private struct NowPlayingBar: View {
                         Image(systemName: "backward.fill").font(.title2)
                     }
                     .accessibilityLabel("Previous song")
+                }
+                if player.nowPlaying.title != nil {
+                    Button {
+                        player.toggleLike()
+                    } label: {
+                        Image(systemName: player.isCurrentSongLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 26))
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .sensoryFeedback(.success, trigger: player.isCurrentSongLiked) { _, liked in liked }
+                    .accessibilityLabel(player.isCurrentSongLiked ? "Remove from liked songs" : "Like song")
                 }
                 if player.nowPlaying.track != nil {
                     Button {
@@ -316,6 +333,65 @@ private struct SettingsView: View {
             loginError = nil
         } catch {
             loginError = error.localizedDescription
+        }
+    }
+}
+
+private struct LikedSongsView: View {
+    @Environment(PlayerModel.self) private var player
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(player.likedSongs) { song in
+                    Button {
+                        openInSpotify(song)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(song.title).foregroundStyle(.primary)
+                            Text([song.artist, song.station].compactMap { $0 }.joined(separator: " · "))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Text(song.date, format: .dateTime.day().month().year())
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .contextMenu {
+                        Button("Open in Spotify", systemImage: "music.note") { openInSpotify(song) }
+                        Button("Copy", systemImage: "doc.on.doc") {
+                            UIPasteboard.general.string = [song.artist, song.title].compactMap { $0 }
+                                .joined(separator: " – ")
+                        }
+                    }
+                }
+                .onDelete { player.removeLikedSongs(at: $0) }
+            }
+            .overlay {
+                if player.likedSongs.isEmpty {
+                    ContentUnavailableView("No liked songs yet", systemImage: "heart",
+                                           description: Text("Tap the heart next to a playing song to keep it here."))
+                }
+            }
+            .navigationTitle("Liked songs")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+                if !player.likedSongs.isEmpty {
+                    ToolbarItem(placement: .topBarLeading) { EditButton() }
+                }
+            }
+        }
+    }
+
+    /// Spotify app search if installed, otherwise the Spotify website.
+    private func openInSpotify(_ song: LikedSong) {
+        let urls = song.spotifyURLs
+        guard let app = urls.app else { return }
+        openURL(app) { opened in
+            if !opened, let web = urls.web { openURL(web) }
         }
     }
 }
