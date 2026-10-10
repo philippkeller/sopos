@@ -12,4 +12,10 @@ It talks to the speaker directly over your Wi-Fi (UPnP on port 1400), no Sonos c
 4. Plug in your iPhone, select it as run destination, press ▶.
    On the phone, allow *Local Network* access when asked.
 
+## Own music (optional)
+
+Under ⚙︎ → *Navidrome*, log in to a Navidrome (or other Subsonic) server. A *Radio | Library* switch
+appears; the speaker streams songs straight from the server, which must be reachable from the speaker
+(e.g. public HTTPS with a valid certificate).
+
 With a free Apple ID the app stops launching after 7 days; just run it again from Xcode.

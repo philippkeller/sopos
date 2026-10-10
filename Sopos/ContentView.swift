@@ -4,6 +4,9 @@ struct ContentView: View {
     @Environment(PlayerModel.self) private var player
     @Environment(\.scenePhase) private var scenePhase
     @State private var showSettings = false
+    @AppStorage("source") private var source = Source.radio
+
+    enum Source: String { case radio, library }
 
     var body: some View {
         NavigationStack {
@@ -15,6 +18,9 @@ struct ContentView: View {
                     }
                 }
                 .sheet(isPresented: $showSettings) { SettingsView() }
+        }
+        .safeAreaInset(edge: .bottom) {
+            if player.room != nil { NowPlayingBar() }
         }
         .task { await player.start() }
         .task(id: scenePhase) {
@@ -30,7 +36,21 @@ struct ContentView: View {
     @ViewBuilder
     private var content: some View {
         if player.room != nil {
-            FavoritesList()
+            Group {
+                if player.library != nil && source == .library { LibraryView() } else { FavoritesList() }
+            }
+            .safeAreaInset(edge: .top) {
+                if player.library != nil {
+                    Picker("Source", selection: $source) {
+                        Text("Radio").tag(Source.radio)
+                        Text("Library").tag(Source.library)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .background(.bar)
+                }
+            }
         } else if case .failed(let message) = player.phase {
             ContentUnavailableView {
                 Label("No speaker found", systemImage: "hifispeaker.fill")
@@ -77,7 +97,6 @@ private struct FavoritesList: View {
             }
         }
         .refreshable { await player.reloadFavorites() }
-        .safeAreaInset(edge: .bottom) { NowPlayingBar() }
     }
 }
 
@@ -131,6 +150,14 @@ private struct NowPlayingBar: View {
                     }
                 }
                 Spacer()
+                if player.nowPlaying.isQueue {
+                    Button {
+                        Task { await player.skip(forward: false) }
+                    } label: {
+                        Image(systemName: "backward.fill").font(.title2)
+                    }
+                    .accessibilityLabel("Previous song")
+                }
                 if player.nowPlaying.track != nil {
                     Button {
                         Task { await openWikipedia() }
@@ -150,6 +177,14 @@ private struct NowPlayingBar: View {
                     Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 52))
                         .contentTransition(.symbolEffect(.replace))
+                }
+                if player.nowPlaying.isQueue {
+                    Button {
+                        Task { await player.skip(forward: true) }
+                    } label: {
+                        Image(systemName: "forward.fill").font(.title2)
+                    }
+                    .accessibilityLabel("Next song")
                 }
             }
 
@@ -179,6 +214,9 @@ private struct SettingsView: View {
     @Environment(PlayerModel.self) private var player
     @Environment(\.dismiss) private var dismiss
     @State private var ip = ""
+    @State private var account = NavidromeAccount(server: "", username: "", password: "")
+    @State private var isLoggingIn = false
+    @State private var loginError: String?
 
     var body: some View {
         NavigationStack {
@@ -217,6 +255,8 @@ private struct SettingsView: View {
                          + "(Settings → System → About My System) or in your router.")
                 }
 
+                navidromeSection
+
                 Section {
                     Button("Search again") {
                         dismiss()
@@ -229,6 +269,53 @@ private struct SettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
             }
+        }
+    }
+
+    private var navidromeSection: some View {
+        Section {
+            if let saved = player.library?.account {
+                LabeledContent("Server", value: saved.server)
+                LabeledContent("User", value: saved.username)
+                Button("Log out", role: .destructive) { player.disconnectLibrary() }
+            } else {
+                TextField("Server, e.g. music.example.com", text: $account.server)
+                    .keyboardType(.URL)
+                    .textContentType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("Username", text: $account.username)
+                    .textContentType(.username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                SecureField("Password", text: $account.password)
+                    .textContentType(.password)
+                Button {
+                    Task { await logIn() }
+                } label: {
+                    if isLoggingIn { ProgressView() } else { Text("Log in") }
+                }
+                .disabled(account.server.isEmpty || account.username.isEmpty || isLoggingIn)
+                if let loginError {
+                    Text(loginError).foregroundStyle(.red)
+                }
+            }
+        } header: {
+            Text("Navidrome")
+        } footer: {
+            Text("Play your own music from a Navidrome (or other Subsonic) server. The speaker streams "
+                 + "straight from the server, so it has to be reachable from the speaker.")
+        }
+    }
+
+    private func logIn() async {
+        isLoggingIn = true
+        defer { isLoggingIn = false }
+        do {
+            try await player.connectLibrary(account)
+            loginError = nil
+        } catch {
+            loginError = error.localizedDescription
         }
     }
 }

@@ -18,6 +18,7 @@ final class PlayerModel {
     private(set) var nowPlaying = NowPlaying()
     var errorMessage: String?
     var isDraggingVolume = false
+    private(set) var library: NavidromeClient? = NavidromeAccount.load().map(NavidromeClient.init)
 
     @ObservationIgnored private var pendingVolume: Int?
     @ObservationIgnored private var volumeTask: Task<Void, Never>?
@@ -114,6 +115,51 @@ final class PlayerModel {
             errorMessage = "Couldn't play \(favorite.title): \(error.localizedDescription)"
         }
         await refresh()
+    }
+
+    /// Plays library songs through the speaker's queue, starting at `index`.
+    func play(_ songs: [Song], from index: Int = 0) async {
+        guard let client, let room, let library, songs.indices.contains(index) else { return }
+        let song = songs[index]
+        let queueURI = "x-rincon-queue:\(room.id)#0"
+        nowPlaying = NowPlaying(artist: song.artist, title: song.title, uri: queueURI)
+        isPlaying = true
+        let tracks = songs.prefix(500).compactMap { song -> QueueTrack? in
+            let stream = library.streamURL(song)
+            guard let url = stream.url else { return nil }
+            return QueueTrack(url: url, mimeType: stream.mimeType, title: song.title, artist: song.artist,
+                              album: song.album, duration: song.duration, artURL: library.coverURL(song.coverArt))
+        }
+        do {
+            try await client.playQueue(tracks, from: index, speakerID: room.id)
+        } catch {
+            isPlaying = false
+            errorMessage = "Couldn't play \(song.title): \(error.localizedDescription)"
+        }
+        await refresh()
+    }
+
+    func skip(forward: Bool) async {
+        guard let client else { return }
+        do {
+            if forward { try await client.next() } else { try await client.previous() }
+        } catch {
+            errorMessage = forward ? "This is the last song." : "Couldn't go back."
+        }
+        await refresh()
+    }
+
+    /// Checks the login before storing it, so a typo shows up right away.
+    func connectLibrary(_ account: NavidromeAccount) async throws {
+        let candidate = NavidromeClient(account: account)
+        try await candidate.ping()
+        account.save()
+        library = candidate
+    }
+
+    func disconnectLibrary() {
+        NavidromeAccount.delete()
+        library = nil
     }
 
     func togglePlayback() async {

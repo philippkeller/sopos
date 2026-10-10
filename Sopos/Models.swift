@@ -30,6 +30,9 @@ struct NowPlaying: Equatable {
     var title: String?
     var uri: String?
 
+    /// Library music plays from the speaker's queue, so next/previous make sense.
+    var isQueue: Bool { uri?.hasPrefix("x-rincon-queue:") ?? false }
+
     /// "Artist – Title" for display.
     var track: String? {
         let parts = [artist, title].compactMap { $0 }

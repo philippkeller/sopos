@@ -118,6 +118,38 @@ extension SonosClient {
         try await play()
     }
 
+    func next() async throws {
+        try await call(.avTransport, "Next", [Self.instance])
+    }
+
+    func previous() async throws {
+        try await call(.avTransport, "Previous", [Self.instance])
+    }
+
+    /// Replaces the speaker's queue with `tracks` and plays it from `index`.
+    /// `speakerID` is the RINCON_… id of the coordinator that owns the queue.
+    func playQueue(_ tracks: [QueueTrack], from index: Int, speakerID: String) async throws {
+        try await call(.avTransport, "RemoveAllTracksFromQueue", [Self.instance])
+        // Sonos accepts at most 16 tracks per call; URIs and metadata are space-separated (like SoCo does it).
+        for start in stride(from: 0, to: tracks.count, by: 16) {
+            let chunk = tracks[start..<min(start + 16, tracks.count)]
+            try await call(.avTransport, "AddMultipleURIsToQueue", [
+                Self.instance, ("UpdateID", "0"), ("NumberOfURIs", String(chunk.count)),
+                ("EnqueuedURIs", chunk.map(\.uri).joined(separator: " ")),
+                ("EnqueuedURIsMetaData", chunk.map(\.metadata).joined(separator: " ")),
+                ("ContainerURI", ""), ("ContainerMetaData", ""),
+                ("DesiredFirstTrackNumberEnqueued", "0"), ("EnqueueAsNext", "0"),
+            ], timeout: 10)
+        }
+        try await call(.avTransport, "SetAVTransportURI", [
+            Self.instance, ("CurrentURI", "x-rincon-queue:\(speakerID)#0"), ("CurrentURIMetaData", ""),
+        ])
+        if index > 0 {
+            try await call(.avTransport, "Seek", [Self.instance, ("Unit", "TRACK_NR"), ("Target", String(index + 1))])
+        }
+        try await play()
+    }
+
     /// Mirrors SoCo's `get_current_track_info` heuristics for radio metadata.
     func nowPlaying() async throws -> NowPlaying {
         async let media = call(.avTransport, "GetMediaInfo", [Self.instance])
@@ -129,7 +161,9 @@ extension SonosClient {
         func usable(_ value: String?) -> String? {
             guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty,
                   !value.hasPrefix("ZPSTR_"), value != "NOT_IMPLEMENTED", !value.hasPrefix("x-") else { return nil }
-            if trackURI.contains(value) || (trackURI.removingPercentEncoding ?? "").contains(value) { return nil }
+            // Radio streams echo their URL as title; plain HTTP tracks (Navidrome) carry real metadata.
+            if !trackURI.hasPrefix("http"),
+               trackURI.contains(value) || (trackURI.removingPercentEncoding ?? "").contains(value) { return nil }
             return value
         }
 
@@ -185,6 +219,31 @@ extension SonosClient {
     func rooms() async throws -> [Room] {
         let result = try await call(.zoneGroupTopology, "GetZoneGroupState")
         return ZoneGroupParser.parse(result["ZoneGroupState"] ?? "")
+    }
+}
+
+/// A plain HTTP(S) track plus the DIDL-Lite metadata Sonos shows while it plays.
+struct QueueTrack {
+    let uri: String
+    let metadata: String
+
+    init(url: URL, mimeType: String, title: String, artist: String?, album: String?, duration: Int?,
+         artURL: URL?) {
+        uri = url.absoluteString
+        let duration = duration.map { String(format: " duration=\"%d:%02d:%02d\"", $0 / 3600, $0 / 60 % 60, $0 % 60) } ?? ""
+        let optional = [
+            artist.map { "<dc:creator>\(xmlEscape($0))</dc:creator>" },
+            album.map { "<upnp:album>\(xmlEscape($0))</upnp:album>" },
+            artURL.map { "<upnp:albumArtURI>\(xmlEscape($0.absoluteString))</upnp:albumArtURI>" },
+        ].compactMap { $0 }.joined()
+        metadata = """
+            <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" \
+            xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">\
+            <item id="-1" parentID="-1" restricted="true">\
+            <res protocolInfo="http-get:*:\(mimeType):*"\(duration)>\(xmlEscape(uri))</res>\
+            <dc:title>\(xmlEscape(title))</dc:title>\(optional)\
+            <upnp:class>object.item.audioItem.musicTrack</upnp:class></item></DIDL-Lite>
+            """
     }
 }
 
