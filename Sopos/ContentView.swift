@@ -164,17 +164,6 @@ private struct NowPlayingBar: View {
                     }
                     .accessibilityLabel("Previous song")
                 }
-                if player.nowPlaying.title != nil {
-                    Button {
-                        player.toggleLike()
-                    } label: {
-                        Image(systemName: player.isCurrentSongLiked ? "heart.fill" : "heart")
-                            .font(.system(size: 26))
-                            .contentTransition(.symbolEffect(.replace))
-                    }
-                    .sensoryFeedback(.success, trigger: player.isCurrentSongLiked) { _, liked in liked }
-                    .accessibilityLabel(player.isCurrentSongLiked ? "Remove from liked songs" : "Like song")
-                }
                 if player.nowPlaying.track != nil {
                     Button {
                         Task { await openWikipedia() }
@@ -187,6 +176,17 @@ private struct NowPlayingBar: View {
                     }
                     .disabled(isLookingUp)
                     .accessibilityLabel("Open on Wikipedia")
+                }
+                if player.nowPlaying.title != nil {
+                    Button {
+                        player.toggleLike()
+                    } label: {
+                        Image(systemName: player.isCurrentSongLiked ? "heart.fill" : "heart")
+                            .font(.system(size: 26))
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .sensoryFeedback(.success, trigger: player.isCurrentSongLiked) { _, liked in liked }
+                    .accessibilityLabel(player.isCurrentSongLiked ? "Remove from liked songs" : "Like song")
                 }
                 Button {
                     Task { await player.togglePlayback() }
