@@ -36,8 +36,13 @@ final class PlayerModel {
             return
         }
         guard let host = await SpeakerDiscovery.findHost() else {
+            #if os(macOS)
+            report("No Sonos speaker found. Make sure your Mac is on the same Wi-Fi and that Sopos may "
+                   + "access the local network (System Settings → Privacy & Security → Local Network).")
+            #else
             report("No Sonos speaker found. Make sure your phone is on the same Wi-Fi and that Sopos may "
                    + "access the local network (iOS Settings → Privacy & Security → Local Network).")
+            #endif
             return
         }
         await connect(host: host)

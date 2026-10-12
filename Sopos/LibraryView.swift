@@ -18,8 +18,12 @@ struct LibraryView: View {
             }
         }
         .listStyle(.plain)
+        #if os(iOS)
         .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "Songs, albums, artists")
+        #else
+        .searchable(text: $query, prompt: "Songs, albums, artists")
+        #endif
         .task { await load() }
         .task(id: query) { await search() }
         .refreshable { await load() }
@@ -45,6 +49,7 @@ struct LibraryView: View {
             } label: {
                 Label("Shuffle everything", systemImage: "shuffle")
             }
+            .rowButton()
         }
         if !playlists.isEmpty {
             Section("Playlists") {
@@ -83,6 +88,7 @@ struct LibraryView: View {
                         CoverRow(title: song.title, subtitle: song.artist,
                                  cover: player.library?.coverURL(song.coverArt, size: 120))
                     }
+                    .rowButton()
                 }
             }
         }
@@ -171,13 +177,16 @@ private struct SongList: View {
                         } label: {
                             songRow(song)
                         }
+                        .rowButton()
                     }
                 }
             }
         }
         .listStyle(.plain)
         .navigationTitle(title)
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
         .overlay {
             if let loadError {
                 ContentUnavailableView("Couldn't load songs", systemImage: "exclamationmark.triangle",
@@ -238,6 +247,7 @@ private struct CoverRow: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
 }

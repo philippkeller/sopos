@@ -22,6 +22,8 @@ struct Favorite: Identifiable, Hashable, Codable {
         func base(_ uri: String) -> Substring { uri.split(separator: "?", maxSplits: 1).first ?? Substring(uri) }
         return other == uri || base(other) == base(uri)
     }
+
+    var debugInfo: String { "\(title)\nURI: \(uri)\nMetadata: \(metadata)" }
 }
 
 struct NowPlaying: Equatable {

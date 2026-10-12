@@ -1,6 +1,6 @@
 # Sopos
 
-A tiny, fast Sonos remote for iOS: pick a station from your Sonos Favorites, play/pause, volume.
+A tiny, fast Sonos remote for iPhone and Mac: pick a station from your Sonos Favorites, play/pause, volume.
 It talks to the speaker directly over your Wi-Fi (UPnP on port 1400), no Sonos cloud.
 
 ## Setup
@@ -11,6 +11,10 @@ It talks to the speaker directly over your Wi-Fi (UPnP on port 1400), no Sonos c
    If the bundle id is taken, change it to anything unique.
 4. Plug in your iPhone, select it as run destination, press ▶.
    On the phone, allow *Local Network* access when asked.
+
+For the Mac app, pick *My Mac* as run destination instead and allow *Local Network* access when asked.
+It's the same target and code; the few Mac-only parts (sidebar window, station grid, *Playback* menu
+with shortcuts, settings under ⌘,) live in `MacContentView.swift` and `#if os(macOS)` blocks.
 
 ## Own music (optional)
 
