@@ -57,6 +57,15 @@ final class PlayerModel {
             let savedID = (Store.load(Store.room) as Room?)?.id
             select(found.first { $0.id == savedID } ?? found[0])
             return true
+        } catch let error as URLError where error.code == .notConnectedToInternet {
+            // That's how a denied Local Network permission shows up, not an actual lack of internet.
+            #if os(macOS)
+            let settings = "System Settings → Privacy & Security → Local Network"
+            #else
+            let settings = "iOS Settings → Privacy & Security → Local Network"
+            #endif
+            if !silently { report("Sopos may not access the local network yet. Allow it under \(settings), then try again.") }
+            return false
         } catch {
             if !silently { report("Couldn't reach a speaker at \(host): \(error.localizedDescription)") }
             return false
