@@ -7,9 +7,10 @@ enum Wikipedia {
         let artist = artist.map(mainArtist)
         let title = title.map(cleanTitle)
 
-        if let title, let artist,
-           let page = try await search("\(title) \(artist)").first(where: { $0.mentions(artist) }) {
-            return page.url
+        if let title, let artist {
+            let pages = try await search("\(title) \(artist)").filter { $0.mentions(artist) }
+            // The band's own article often ranks above the song's, so look for the song by name first.
+            if let page = pages.first(where: { $0.isNamed(title) }) ?? pages.first { return page.url }
         }
         if let artist, let page = try await search(artist).first(where: { $0.mentions(artist) }) {
             return page.url
@@ -30,6 +31,12 @@ enum Wikipedia {
             return URL(string: "https://en.wikipedia.org/wiki/\(path)")
         }
 
+        /// "Home (Edward Sharpe and the Magnetic Zeros song)" is named "Home".
+        func isNamed(_ name: String) -> Bool {
+            let base = title.replacingOccurrences(of: "\\s*\\([^)]*\\)$", with: "", options: .regularExpression)
+            return Wikipedia.normalized(base) == Wikipedia.normalized(name)
+        }
+
         func mentions(_ name: String) -> Bool {
             // Snippets contain highlight markup like <span class="searchmatch">Amy</span>.
             let text = (title + " " + snippet).replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
@@ -37,11 +44,13 @@ enum Wikipedia {
         }
     }
 
-    /// Loose comparison form: "The B-52's", "the B-52&#039;s" and "The B-52s" all become "theb52s".
+    /// Loose comparison form: "The B-52's", "the B-52&#039;s" and "The B-52s" all become "theb52s",
+    /// and "&" counts as "and" ("Edward Sharpe & The Magnetic Zeros" vs. "… and the Magnetic Zeros").
     private static func normalized(_ text: String) -> String {
         let decoded = text
             .replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&#[0-9]+;|&[a-z]+;", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "&", with: " and ")
         return decoded.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
             .filter { $0.isLetter || $0.isNumber }
     }
